@@ -27,11 +27,11 @@ main(List<String> args) async {
     ..addOption("basic-token", help: "Basic authentication token");
 
   link.configure(argp: ap);
-  link.init();
 
   BClient.rootUrl = link.parsedArguments['endpoint'];
   BClient.basicToken = link.parsedArguments['basic-token'];
 
+  link.init();
   await link.connect();
 }
 
