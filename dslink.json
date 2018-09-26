@@ -1,0 +1,35 @@
+{
+  "name" : "dslink-dart-belimo_cloud",
+  "version" : "1.3.5",
+  "description" : "Belimo DSLink",
+  "main" : "bin/run.dart",
+  "engines" : {
+    "dart" : ">1.13.0"
+  },
+  "getDependencies" : [],
+  "configs" : {
+    "broker" : {
+      "type" : "url"
+    },
+    "name" : {
+      "type" : "string",
+      "default" : "Belimo"
+    },
+    "token" : {
+      "type" : "string"
+    },
+    "log": {
+      "type": "enum[info,off,warning,severe,fine,finer,finest,all]",
+      "default": "info"
+    },
+    "endpoint": {
+      "type": "url",
+      "value": "https://cloud.belimo.com"
+    },
+    "basic-token": {
+      "type": "string",
+      "default": ""
+    }
+  }
+}
+
