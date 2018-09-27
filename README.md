@@ -4,6 +4,8 @@ A DSLink for Belimo Cloud API (v3).
 
 ### Versions
 
+* 1.3.6 - Provide a "Queue Level" metric on the root node to track current request queue. Remove some
+  debug logging.
 * 1.3.5 - Move Basic-token and endpoint to dslink configuration.
 * 1.3.4 - Improve performance of Remove Account action. 
 * 1.3.3 - Update to reflect change in dataprofile reference already including leading `/`

@@ -42,6 +42,8 @@ class BClient {
   static const String _bearerAuth = 'Bearer';
   static const int _maxPending = 5;
 
+  static StreamController<int> _controller = new StreamController<int>();
+  static Stream<int> get stream => _controller.stream;
   static String rootUrl;
   static String basicToken;
 
@@ -60,7 +62,7 @@ class BClient {
 
   static Future<Map<String,dynamic>> _addDataRequest(DataRequest data) {
     _queue.add(data);
-    logger.warning('Added request to queue: Current level ${_queue.length}');
+    _controller.add(_queue.length);
     _sendDataRequests();
     return data.future;
   }
@@ -68,6 +70,7 @@ class BClient {
   static Future _sendDataRequests() async {
     while (_queue.isNotEmpty && _pendingDataRequests < _maxPending) {
       var dr = _queue.removeAt(0);
+      _controller.add(_queue.length);
       // Don't use await here, or it will block the loop
       dr.client._sendRequest(dr.query, dr.path).then(_processDataResult(dr));
       _pendingDataRequests += 1;

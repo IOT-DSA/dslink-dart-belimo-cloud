@@ -18,8 +18,10 @@ main(List<String> args) async {
       DataValueNode.isType: (String path) => new DataValueNode(path),
       DataDatePoint.isType: (String path) => new DataDatePoint(path),
       DataTimeseries.isType: (String path) => new DataTimeseries(path),
+      QueueLevel.isType: (String path) => new QueueLevel(path)
   }, defaultNodes: {
-      AddAccount.pathName: AddAccount.definition()
+      AddAccount.pathName: AddAccount.definition(),
+      QueueLevel.pathName: QueueLevel.def()
   });
   
   var ap = new ArgParser(allowTrailingOptions: true);
