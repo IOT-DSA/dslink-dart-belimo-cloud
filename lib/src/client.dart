@@ -197,9 +197,6 @@ class BClient {
       query = {'at': '$at'};
     }
 
-    requestDebug += 1;
-    var i = requestDebug;
-    logger.warning('DeviceData Request #$i: Parameters - $query');
     var dr = new DataRequest(this, dev, query, PathHelper.deviceData(dev.id));
     _queuedRequests += 1;
     Map map;
@@ -212,7 +209,6 @@ class BClient {
       _queuedRequests -= 1;
     }
 
-    logger.warning('Response from Request #$i: $map');
     DeviceData dd;
     try {
       dd = new DeviceData.fromJson(dev.profile, map);
@@ -238,7 +234,6 @@ class BClient {
     dp.loaded = true;
   }
 
-  int requestDebug = 0;
   Future<List<DataSeries>> getTimeseriesData(Device dev, String ids,
       String from, String to, int resolution) async {
     if (dev == null) return null;
@@ -254,9 +249,6 @@ class BClient {
       query['to'] = '$to';
     }
 
-    requestDebug += 1;
-    var i = requestDebug;
-    logger.warning('TimeSeries Request #$i: Parameters - $query');
     var dr = new DataRequest(this, dev, query, PathHelper.timeseries(dev.id));
     _queuedRequests += 1;
     Map resp;
@@ -272,7 +264,6 @@ class BClient {
 
     var list = new List<DataSeries>();
 
-    logger.warning('Response from Request #$i: $resp');
     if (resp == null || resp.isEmpty) {
       logger.warning('[Account: $user] - Data request failed on device: ${dev.id}');
       return list;
