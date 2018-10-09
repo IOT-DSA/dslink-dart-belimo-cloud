@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert' show JSON, UTF8;
+import 'dart:collection' show HashMap;
 import 'dart:io';
 
 import 'package:dslink/utils.dart' show logger;
@@ -25,6 +26,7 @@ class DataRequest {
   final Device device;
   final Map<String, String> query;
   final String path;
+  int hashCode;
 
   Future<Map<String,dynamic>> get future => _completer.future;
 
@@ -32,6 +34,11 @@ class DataRequest {
 
   DataRequest(this.client, this.device, this.query, this.path) {
     _completer = new Completer<Map<String,dynamic>>();
+    var hash = path;
+    if (query != null && query.isNotEmpty) {
+      query.forEach((key, val) { hash += '$key:$val'; });
+    }
+    hashCode = hash.hashCode;
   }
 }
 
@@ -48,6 +55,8 @@ class BClient {
   static String basicToken;
 
   static final List<DataRequest> _queue = <DataRequest>[];
+  static final HashMap<int, DataRequest> _requestCache =
+      new HashMap<int, DataRequest>();
   static final Map<String, BClient> _cache = <String, BClient>{};
   static int _pendingDataRequests = 0;
 
@@ -61,7 +70,13 @@ class BClient {
   bool get _authed => _accessTok != null && _accessTok.isNotEmpty;
 
   static Future<Map<String,dynamic>> _addDataRequest(DataRequest data) {
+    var el = _requestCache[data.hashCode];
+    if (el != null) {
+      return el.future;
+    }
+
     _queue.add(data);
+    _requestCache[data.hashCode] = data;
     _controller.add(_queue.length);
     _sendDataRequests();
     return data.future;
@@ -79,6 +94,8 @@ class BClient {
 
   static Function _processDataResult(DataRequest data) {
     return (Map<String, dynamic> map) {
+      _requestCache.remove(data.hashCode);
+
       _pendingDataRequests -= 1;
       _sendDataRequests(); // Trigger another cycle
 
@@ -355,6 +372,7 @@ class BClient {
       _queue.removeWhere((data) {
         if (data.client == this) {
           data._completer.completeError(new CloseException('Cancelled'));
+          _requestCache.remove(data.hashCode);
           return true;
         }
         return false;
