@@ -4,6 +4,7 @@ A DSLink for Belimo Cloud API (v3).
 
 ### Versions
 
+* 1.3.8 - Update DSLink SDK for fix with updating list subscriptions
 * 1.3.7 - Check for existing pending requests before adding a new one. Compare device, API and 
           query parameters.
 * 1.3.6+1 - Remove more debug logging
