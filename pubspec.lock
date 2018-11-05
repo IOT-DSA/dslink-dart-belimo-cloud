@@ -49,14 +49,13 @@ packages:
       name: diff_match_patch
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "0.2.1"
+    version: "0.2.2"
   dslink:
     description:
-      ref: HEAD
-      resolved-ref: "29d1c6b1e31603eaa7c9de5cfa75131229a02c75"
-      url: "https://github.com/IOT-DSA/sdk-dslink-dart.git"
-    source: git
-    version: "0.6.2"
+      name: dslink
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "1.0.1"
   fixnum:
     description:
       name: fixnum
