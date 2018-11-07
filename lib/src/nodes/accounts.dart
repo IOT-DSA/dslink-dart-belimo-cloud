@@ -6,6 +6,7 @@ import 'package:dslink/nodes.dart' show NodeNamer;
 import 'common.dart';
 import 'devices.dart';
 import '../client.dart';
+import '../../models.dart' show Owner;
 
 //* @Action Add_Account
 //* @Parent root
@@ -313,54 +314,20 @@ class AccountNode extends SimpleNode implements Account {
     }
 
     if (t == null) {
+      // Called explicitly, restart timer from this point.
       _refresh?.cancel();
       _refresh = new Timer.periodic(_refDur, _refreshDevices);
     } else {
       // When called by timer check if we have active subscriptions.
       // If not, disable timer and don't query.
-      bool hasSubs = false;
-      mainLoop:
-      for (var ow in children.values) {
-        if (ow is OwnerNode) {
-          var tmpOwn = provider.getNode(ow.path) as OwnerNode;
-          for (var dev in tmpOwn.children.values) {
-            if (dev is DeviceNd) {
-              hasSubs = (dev as DeviceNd).hasSubscription;
-            }
-            if (hasSubs) break mainLoop; // Only need to confirm one subscription.
-          }
-        }
-      }
-
-      if (!hasSubs) { // If called explicitly don't cancel
+      if (!_hasSubscribers()) {
         _refresh?.cancel();
         return;
       }
     }
 
-    var owners = await _client.getDevicesByOwner();
-
-    for (var own in owners) {
-      var oname = NodeNamer.createName(own.name);
-      var oNd = provider.getNode('$path/$oname') as OwnerNode;
-      if (oNd == null) {
-        oNd = provider.addNode('$path/$oname', OwnerNode.definition(own))
-            as OwnerNode;
-        oNd.setOwner(own);
-      }
-
-      for (var dev in own.devices) {
-        var nm = NodeNamer.createName(dev.displayName);
-        var dNd = provider.getNode('${oNd.path}/$nm');
-        if (dNd == null) {
-          dNd = provider.addNode('${oNd.path}/$nm',
-              DeviceNode.definition(dev)) as DeviceNode;
-          dNd.setDevice(dev);
-        } else {
-          (dNd as DeviceNode).updateDevice(dev);
-        }
-      }
-    }
+    loadUser();
+    _client.getDevicesByOwner().then(_populateOwnerDevices);
   }
 
   @override
@@ -398,6 +365,46 @@ class AccountNode extends SimpleNode implements Account {
     }
 
     return auth;
+  }
+
+  // Check if any of the children devices has a subscription
+  bool _hasSubscribers() {
+    for (var node in children.values) {
+      if (node is! OwnerNode) continue;
+      OwnerNode ow = node;
+      var tmpOwn = provider.getNode(ow.path) as OwnerNode;
+      for (var dev in tmpOwn.children.values) {
+        if (dev is DeviceNd && (dev as DeviceNd).hasSubscription) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // Populate Owners (locations) and devices at each.
+  void _populateOwnerDevices(List<Owner> owners) {
+    for (var own in owners) {
+      var oname = NodeNamer.createName(own.name);
+      var oNd = provider.getNode('$path/$oname') as OwnerNode;
+      if (oNd == null) {
+        oNd = provider.addNode('$path/$oname', OwnerNode.definition(own))
+        as OwnerNode;
+        oNd.setOwner(own);
+      }
+
+      for (var dev in own.devices) {
+        var nm = NodeNamer.createName(dev.displayName);
+        var dNd = provider.getNode('${oNd.path}/$nm');
+        if (dNd == null) {
+          dNd = provider.addNode('${oNd.path}/$nm',
+              DeviceNode.definition(dev)) as DeviceNode;
+          dNd.setDevice(dev);
+        } else {
+          (dNd as DeviceNode).updateDevice(dev);
+        }
+      }
+    }
   }
 }
 
