@@ -4,6 +4,7 @@ A DSLink for Belimo Cloud API (v3).
 
 ### Versions
 
+* 1.3.9 - Update User data (name, address etc) with each refresh every 5 minutes
 * 1.3.8 - Update DSLink SDK for fix with updating list subscriptions
 * 1.3.7 - Check for existing pending requests before adding a new one. Compare device, API and 
           query parameters.
