@@ -69,10 +69,6 @@ class AddAccount extends SimpleNode {
 
     var n = NodeNamer.createName(name);
     var nd = provider.getNode('/$n');
-    if (nd != null) {
-      return ret..[_message] =
-          'Account with display name: "$name" already exists';
-    }
 
     var user = params[_user];
     var pass = params[_pass];
@@ -80,8 +76,12 @@ class AddAccount extends SimpleNode {
 
     ret[_success] = await cl.authenticate();
     if (ret[_success]) {
-
-      provider.addNode('/$n', AccountNode.definition(user, pass));
+      if (nd == null) {
+        provider.addNode('/$n', AccountNode.definition(user, pass));
+      } else {
+        (nd as AccountNode)..loadUser()
+            ..loadDevices();
+      }
 
       ret[_message] = 'Success!';
       _link.save();
