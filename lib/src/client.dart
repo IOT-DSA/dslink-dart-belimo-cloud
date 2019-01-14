@@ -181,14 +181,16 @@ class BClient {
 
     if (bd == null || bd['access_token'] == null) {
       logger.warning('Authorization: Status OK but no access_token available.' +
-        'body is: $bd');
+          'body is: $bd');
       _checkPass = null;
       return false;
     }
 
     _accessTok = bd['access_token'];
-    _pass = _checkPass;
-    _checkPass = null;
+    if (_checkPass != null) {
+      _pass = _checkPass;
+      _checkPass = null;
+    }
 
     return true;
   }
