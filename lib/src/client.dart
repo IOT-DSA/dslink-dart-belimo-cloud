@@ -64,10 +64,11 @@ class BClient {
   HttpClient _client;
   String user;
   String _pass;
+  String _checkPass;
   Uri _root;
   String _accessTok;
   int _queuedRequests = 0;
-  bool get _authed => _accessTok != null && _accessTok.isNotEmpty;
+  bool get authed => _accessTok != null && _accessTok.isNotEmpty;
 
   static Future<Map<String,dynamic>> _addDataRequest(DataRequest data) {
     var el = _requestCache[data.hashCode];
@@ -110,24 +111,38 @@ class BClient {
     };
   }
 
-  factory BClient(String username, String password) {
-    var cl = _cache[username] ??= new BClient._(username, password);
-    if (password != cl._pass) {
-      cl._pass = password;
-      cl._accessTok = null;
+  factory BClient(String user, String pass) {
+    var cl = _cache[user];
+
+    if (cl == null) {
+      cl = new BClient._(user, pass);
+      _cache[user] = cl;
+    } else {
+      cl._checkPass = pass;
     }
+
     return cl;
   }
 
   BClient._(this.user, this._pass) {
     _client = new HttpClient();
+    _client.badCertificateCallback = (X509Certificate cert, String host, int port) {
+      logger.warning('Invalid certificate received for: $host:$port');
+      return true;
+    };
     _root = Uri.parse(rootUrl);
   }
 
   /// Attempt to authenticate to remote cloud server with the credentials
   /// provided. Returns true on success and false on failure.
   Future<bool> authenticate() async {
-    if (_authed) return _authed;
+    // Already authenticated return true
+    if (authed && _checkPass == null) return authed;
+    // Already authenticated and password check shows same password return true
+    if (authed && _checkPass == _pass) {
+      _checkPass = null;
+      return authed;
+    }
 
     if (basicToken == null || basicToken.isEmpty) {
       throw new StateError('Required basic-token has not been supplied.');
@@ -137,6 +152,7 @@ class BClient {
 
     Map bd;
     HttpClientResponse resp;
+    String pw = _checkPass ?? _pass;
     try {
       var req = await _client.postUrl(uri);
       req.headers.set(_headerAuth, _basicAuth + basicToken);
@@ -144,12 +160,13 @@ class BClient {
           ContentType.parse('application/x-www-form-urlencoded');
       req.write('grant_type=password&' +
           'username=${Uri.encodeQueryComponent(user)}&' +
-          'password=${Uri.encodeQueryComponent(_pass)}');
+          'password=${Uri.encodeQueryComponent(pw)}');
 
       resp = await req.close();
       bd = await JSON.decode(await UTF8.decodeStream(resp));
     } catch (e) {
       logger.warning('Failed to decode response body', e);
+      return false;
     }
 
     if (resp.statusCode != HttpStatus.OK) {
@@ -158,15 +175,22 @@ class BClient {
         logger.warning('Error: ${bd['error']} '
             'Description: ${bd['error_description']}');
       }
+      _checkPass = null;
       return false;
     }
 
     if (bd == null || bd['access_token'] == null) {
       logger.warning('Authorization: Status OK but no access_token available.' +
-        'body is: $bd');
+          'body is: $bd');
+      _checkPass = null;
       return false;
     }
+
     _accessTok = bd['access_token'];
+    if (_checkPass != null) {
+      _pass = _checkPass;
+      _checkPass = null;
+    }
 
     return true;
   }

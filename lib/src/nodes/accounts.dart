@@ -69,10 +69,6 @@ class AddAccount extends SimpleNode {
 
     var n = NodeNamer.createName(name);
     var nd = provider.getNode('/$n');
-    if (nd != null) {
-      return ret..[_message] =
-          'Account with display name: "$name" already exists';
-    }
 
     var user = params[_user];
     var pass = params[_pass];
@@ -80,14 +76,17 @@ class AddAccount extends SimpleNode {
 
     ret[_success] = await cl.authenticate();
     if (ret[_success]) {
-
-      provider.addNode('/$n', AccountNode.definition(user, pass));
+      if (nd == null) {
+        provider.addNode('/$n', AccountNode.definition(user, pass));
+      } else {
+        (nd as AccountNode)..loadUser()
+            ..loadDevices();
+      }
 
       ret[_message] = 'Success!';
       _link.save();
     } else {
       ret[_message] = 'Unable to authenticate with provided credentials';
-      cl.close();
     }
 
     return ret;
@@ -356,12 +355,12 @@ class AccountNode extends SimpleNode implements Account {
 
     var auth = await cl.authenticate();
     if (auth) {
+      // Only close old if the username is different
       if (curU != user) _client?.close();
+
       _client = cl;
       configs[_user] = user;
       configs[_pass] = pass;
-    } else {
-      cl.close();
     }
 
     return auth;
