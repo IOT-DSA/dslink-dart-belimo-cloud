@@ -282,12 +282,14 @@ class AccountNode extends SimpleNode implements Account {
 
     var owners = await _client.getDevicesByOwner();
     for (var own in owners) {
+      if (own?.name == null) continue;
       var oname = NodeNamer.createName(own.name);
       var oNd = provider.addNode('$path/$oname', OwnerNode.definition(own))
           as OwnerNode;
       oNd.setOwner(own);
 
       for (var dev in own.devices) {
+        if (dev?.displayName == null) continue;
         var dname = NodeNamer.createName(dev.displayName);
         var devNd = provider.addNode('${oNd.path}/$dname',
             DeviceNode.definition(dev)) as DeviceNode;
