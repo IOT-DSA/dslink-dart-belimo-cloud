@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dslink/nodes.dart' show NodeNamer;
+import 'package:dslink/dslink.dart' show SimpleNode;
 
 import 'common.dart';
 import 'data.dart';
@@ -60,6 +61,26 @@ class OwnerNode extends ChildNode implements OwnerNd {
 
   OwnerNode(String path) : super(path) {
     _ownComp = new Completer<Owner>();
+  }
+
+  void update(Owner own) {
+    _owner = own;
+    displayName = own.name;
+
+    SimpleNode node = children['type'];
+    node.updateValue(own.type);
+    node = children['id'];
+    node.updateValue(own.id);
+  }
+
+  Future remove() async {
+    var futs = <Future>[];
+    for (var cn in children.keys.toList()) {
+      futs.add(new Future(() => removeChild(cn)));
+    }
+
+    await Future.wait(futs);
+    super.remove();
   }
 }
 
@@ -255,12 +276,14 @@ class DeviceNode extends ChildNode implements DeviceNd {
   }
 
   DeviceNode(String path): super(path) {
+    serializable = false;
     _datapoints = new Set<String>();
     _devComp = new Completer<Device>();
   }
 
   void updateDevice(Device dev, {bool force: false}) {
     _device = dev;
+    if (!hasSubscription && !force) return;
     getClient().then((cl) async {
       // In the case of a large queue, it's possible the refresh timer may
       // fire before the previous refresh is finished, resulting in the same
