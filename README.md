@@ -4,6 +4,7 @@ A DSLink for Belimo Cloud API (v3).
 
 ### Versions
 
+* 1.5.1 - Fix bug in remove account. Ensure node is OwnerNode so we don't remove actions.
 * 1.5.0 - On refresh interval, only update device datapoints not all owners and devices on a given account.
 * 1.4.0 - Change Add_Account action to verify username/password if account is already added.
 * 1.3.9 - Update User data (name, address etc) with each refresh every 5 minutes
