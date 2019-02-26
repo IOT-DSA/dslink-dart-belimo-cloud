@@ -16,11 +16,12 @@ class DeviceData {
           '${map['timestamp']}', e);
     }
 
-    values = new List<DataValue>();
     var points = map['datapoints'] as Map<String, Map>;
+    values = new List<DataValue>(points.length);
+    int i = 0;
     points.forEach((String dataname, Map<String, dynamic> map) {
       var datapoint = profile[dataname];
-      values.add(new DataValue.fromJson(datapoint, map, dataname, timestamp));
+      values[i++] = new DataValue.fromJson(datapoint, map, dataname, timestamp);
     });
   }
 }

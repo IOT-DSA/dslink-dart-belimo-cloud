@@ -260,13 +260,28 @@ class DeviceNode extends ChildNode implements DeviceNd {
   bool _isRefreshing = false;
 
   bool get hasSubscription => _datapoints.isNotEmpty;
+  Stream<DeviceData> dataStream;
+  StreamSubscription<DeviceData> _subscription;
 
   void addSubscription(String name) {
     _datapoints.add(name);
+    if (dataStream == null) {
+      getClient().then((client) async {
+        if (_device == null) {
+          await device;
+        }
+        dataStream = client.subscribeDevice(_device);
+        _subscription = dataStream.listen(_loadData);
+      });
+    }
   }
 
   void removeSubscription(String name) {
     _datapoints.remove(name);
+    if (_datapoints.isEmpty) {
+      _subscription.cancel().then((_) => _subscription = null);
+      dataStream = null;
+    }
   }
 
   void setDevice(Device dev) {
@@ -314,6 +329,20 @@ class DeviceNode extends ChildNode implements DeviceNd {
   void _loadData(DeviceData data) {
     _isRefreshing = false;
     if (data == null || data.values.isEmpty) return;
+
+    if (hasSubscription) {
+      for (var dp in _datapoints) {
+        var dv = provider.getNode('$path/$_data/$dp');
+        if (dv == null) continue;
+
+        var val = data.values.firstWhere((v) => v.name == dp, orElse: () => null);
+        if (val == null) continue;
+
+        dv.updateValue(val.value);
+      }
+      return;
+    }
+
     for(var v in data.values) {
       var ndName = NodeNamer.createName(v.name);
       var dv = provider.getNode('$path/$_data/$ndName');

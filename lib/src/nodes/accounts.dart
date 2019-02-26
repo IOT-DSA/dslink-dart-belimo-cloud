@@ -159,7 +159,6 @@ class AccountNode extends SimpleNode implements Account {
 
   BClient _client;
   Completer<BClient> _clComp;
-  Timer _refresh;
 
   Future<BClient> get client async {
     if (_client != null) {
@@ -195,8 +194,6 @@ class AccountNode extends SimpleNode implements Account {
         _clComp.complete(cl);
         loadUser();
         loadDevices();
-
-        _refresh = new Timer.periodic(_refDur, _refreshDevices);
       } else {
         cl.close();
       }
@@ -339,7 +336,6 @@ class AccountNode extends SimpleNode implements Account {
 
       devices.remove(dev);
       new Future(() => device.updateDevice(dev));
-//      device.updateDevice(dev);
     }
 
     for (var dev in devices) {
@@ -351,42 +347,18 @@ class AccountNode extends SimpleNode implements Account {
     }
   }
 
-  // A better recursive removal than provided by the DSLink SDK.
-  void _rmNode(LocalNode ln) {
-    if (ln == null) return;
-
-    for(var c in ln.children.keys.toList()) {
-      _rmNode(provider.getNode('${ln.path}/$c'));
-    }
-
-    provider.removeNode(ln.path, recurse: false);
-  }
-
-  Future<Null> _refreshDevices(Timer t) async {
+  Future<Null> _refreshDevices() async {
     if (_client == null) {
       throw new StateError('Client is not authenticated');
     }
 
-    if (t == null) {
-      // Called explicitly, restart timer from this point.
-      _refresh?.cancel();
-      _refresh = new Timer.periodic(_refDur, _refreshDevices);
-    } else {
-      // When called by timer check if we have active subscriptions.
-      // If not, disable timer and don't query.
-      if (!_hasSubscribers()) {
-        _refresh?.cancel();
-        return;
-      }
-    }
-
     loadUser();
     _client.getDevicesByOwner().then(_populateOwnerDevices);
+
   }
 
   @override
   void onRemoving() {
-    _refresh?.cancel();
     _client?.close();
 
     // User this instead of default removeNode because it's more efficient.
@@ -420,21 +392,6 @@ class AccountNode extends SimpleNode implements Account {
     }
 
     return auth;
-  }
-
-  // Check if any of the children devices has a subscription
-  bool _hasSubscribers() {
-    for (var node in children.values) {
-      if (node is! OwnerNode) continue;
-      OwnerNode ow = node;
-      var tmpOwn = provider.getNode(ow.path) as OwnerNode;
-      for (var dev in tmpOwn.children.values) {
-        if (dev is DeviceNd && (dev as DeviceNd).hasSubscription) {
-          return true;
-        }
-      }
-    }
-    return false;
   }
 
   // Populate Owners (locations) and devices at each.
@@ -597,7 +554,7 @@ class RefreshDevices extends SimpleNode {
     final ret = {_success: true, _message: 'Success!'};
 
     try {
-      await (parent as AccountNode)._refreshDevices(null);
+      await (parent as AccountNode)._refreshDevices();
     } on StateError catch (e) {
       return ret..[_success] = false
           ..[_message] = e.message;

@@ -8,7 +8,7 @@ class Owner {
   static final HashMap<String, Owner> _cache = new HashMap<String, Owner>();
   static void clearDevices() {
     for (var own in _cache.values) {
-      own.devices.clear();
+      own.devices.length = 0;
     }
   }
 

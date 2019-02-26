@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:convert' show JSON, UTF8;
+import 'dart:convert';
 import 'dart:collection' show HashMap;
 import 'dart:io';
 
@@ -69,6 +69,10 @@ class BClient {
   String _accessTok;
   int _queuedRequests = 0;
   bool get authed => _accessTok != null && _accessTok.isNotEmpty;
+  static const JsonDecoder jsonDecoder = const JsonDecoder();
+  static const Utf8Decoder utf8decoder = const Utf8Decoder();
+
+  Timer deviceTimer;
 
   static Future<Map<String,dynamic>> _addDataRequest(DataRequest data) {
     var el = _requestCache[data.hashCode];
@@ -163,7 +167,8 @@ class BClient {
           'password=${Uri.encodeQueryComponent(pw)}');
 
       resp = await req.close();
-      bd = await JSON.decode(await UTF8.decodeStream(resp));
+      bd = jsonDecoder.convert(await UTF8.decodeStream(resp));
+//      bd = await JSON.decode(await UTF8.decodeStream(resp));
     } catch (e) {
       logger.warning('Failed to decode response body', e);
       return false;
@@ -227,6 +232,28 @@ class BClient {
     }
 
     return owners.toList();
+  }
+
+  Stream<DeviceData> subscribeDevice(Device dev) {
+    DeviceStream ds;
+    if (DeviceStream._subbed.containsKey(dev.id)) {
+      ds = DeviceStream._subbed[dev.id];
+    } else {
+      ds = new DeviceStream(dev);
+    }
+
+    if (deviceTimer == null || !deviceTimer.isActive) {
+      deviceTimer = new Timer.periodic(const Duration(minutes: 5), refreshDeviceData);
+    }
+    return ds.controller.stream;
+  }
+
+  void refreshDeviceData(Timer t) {
+    for (var sc in DeviceStream._subbed.values) {
+      getDeviceData(sc.device).then((DeviceData data) {
+        sc.controller.add(data);
+      });
+    }
   }
 
   /// Get [DeviceData] from the specified Device ID *devId* optionally specify
@@ -368,7 +395,7 @@ class BClient {
       var req = await _client.getUrl(uri).timeout(_timeOut);
       req.headers.set(_headerAuth, '$_bearerAuth $_accessTok');
       var resp = await req.close().timeout(_timeOut);
-      body = JSON.decode(await UTF8.decodeStream(resp));
+      body = jsonDecoder.convert(await UTF8.decodeStream(resp));
       logger.finest('Request: "$path" Response body: $body');
     } catch (e) {
       logger.warning(
@@ -406,6 +433,22 @@ class BClient {
     _accessTok = null;
     _client.close(force: true);
     _cache.remove(user);
+  }
+}
+
+class DeviceStream {
+  static Map<String, DeviceStream> _subbed = <String, DeviceStream>{};
+  final Device device;
+  StreamController<DeviceData> controller;
+
+  DeviceStream(this.device) {
+    controller = new StreamController<DeviceData>.broadcast();
+    controller.onCancel = () {
+      controller.close();
+      _subbed.remove(device.id);
+    };
+
+    _subbed[device.id] = this;
   }
 }
 
