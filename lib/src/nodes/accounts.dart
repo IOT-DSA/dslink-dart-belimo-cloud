@@ -362,7 +362,7 @@ class AccountNode extends SimpleNode implements Account {
     _client?.close();
 
     // User this instead of default removeNode because it's more efficient.
-    for (var c in children.values.toList()) {
+    for (var c in children.values.where((nd) => nd is OwnerNode).toList()) {
 //      _rmNode(c as LocalNode);
       (c as OwnerNode).remove();
     }
