@@ -4,7 +4,8 @@ A DSLink for Belimo Cloud API (v3).
 
 ### Versions
 
-* 1.5.2 - Address some possible sources of null references if DeviceData API query returns invalid data.
+* 1.5.3 - Address some possible sources of null references if DeviceData API query returns invalid data, and a rare
+          corner case where closing subscription caused a crash. 
 * 1.5.1 - Fix bug in remove account. Ensure node is OwnerNode so we don't remove actions.
 * 1.5.0 - On refresh interval, only update device datapoints not all owners and devices on a given account.
 * 1.4.0 - Change Add_Account action to verify username/password if account is already added.
