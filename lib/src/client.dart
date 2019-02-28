@@ -251,6 +251,8 @@ class BClient {
   void refreshDeviceData(Timer t) {
     for (var sc in DeviceStream._subbed.values) {
       getDeviceData(sc.device).then((DeviceData data) {
+        if (data == null) return;
+
         sc.controller.add(data);
       });
     }
@@ -275,6 +277,11 @@ class BClient {
       return null;
     } finally {
       _queuedRequests -= 1;
+    }
+
+    if (map.containsKey('errors')) {
+      logger.warning('Device Data contains errors: $map');
+      return null;
     }
 
     DeviceData dd;

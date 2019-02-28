@@ -328,7 +328,7 @@ class DeviceNode extends ChildNode implements DeviceNd {
 
   void _loadData(DeviceData data) {
     _isRefreshing = false;
-    if (data == null || data.values.isEmpty) return;
+    if (data == null || data.values == null || data.values.isEmpty) return;
 
     if (hasSubscription) {
       for (var dp in _datapoints) {
