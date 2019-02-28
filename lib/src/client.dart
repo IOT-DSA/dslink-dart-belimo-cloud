@@ -280,7 +280,7 @@ class BClient {
     }
 
     if (map.containsKey('errors')) {
-      logger.warning('Device Data contains errors: $map');
+      logger.warning('[Account: $user] Device Data contains errors: $map');
       return null;
     }
 
@@ -288,7 +288,7 @@ class BClient {
     try {
       dd = new DeviceData.fromJson(dev.profile, map);
     } catch (e) {
-      logger.warning('Error parsing DeviceData: $map', e);
+      logger.warning('[Account: $user] Error parsing DeviceData: $map', e);
     }
 
     return dd;
@@ -299,7 +299,7 @@ class BClient {
     var resp = await _sendRequest(null, PathHelper.dataProfiles(dp.ref));
 
     if (resp == null || resp['datapoints'] == null) {
-      logger.warning('Unable to retrieve datapoints for: ${dp.ref}');
+      logger.warning('[Account: $user] Unable to retrieve datapoints for: ${dp.ref}');
       return;
     }
     for (Map pt in resp['datapoints'] as List) {

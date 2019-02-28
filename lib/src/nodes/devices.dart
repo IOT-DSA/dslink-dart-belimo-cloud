@@ -278,8 +278,14 @@ class DeviceNode extends ChildNode implements DeviceNd {
 
   void removeSubscription(String name) {
     _datapoints.remove(name);
-    if (_datapoints.isEmpty) {
-      _subscription.cancel().then((_) => _subscription = null);
+    if (_datapoints.isEmpty && _subscription != null) {
+      var fut = _subscription.cancel();
+      // Cancel can sometimes return null (though shouldn't). So watch out
+      if (fut != null) {
+        fut.then((_) => _subscription = null).catchError((e) {});
+      } else {
+        _subscription = null;
+      }
       dataStream = null;
     }
   }
