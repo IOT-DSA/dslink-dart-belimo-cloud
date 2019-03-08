@@ -1,6 +1,6 @@
 {
   "name" : "dslink-dart-belimo_cloud",
-  "version" : "1.5.3",
+  "version" : "1.5.4",
   "description" : "Belimo DSLink",
   "main" : "bin/run.dart",
   "engines" : {
