@@ -263,17 +263,32 @@ class DeviceNode extends ChildNode implements DeviceNd {
   Stream<DeviceData> dataStream;
   StreamSubscription<DeviceData> _subscription;
 
+  DeviceNode(String path): super(path) {
+    serializable = false;
+    _datapoints = new Set<String>();
+    _devComp = new Completer<Device>();
+  }
+
+  @override
+  void onRemoving() {
+    if (_datapoints.isNotEmpty) {
+      for (var dp in _datapoints.toList()) {
+        removeSubscription(dp);
+      }
+    }
+  }
+
   void addSubscription(String name) {
     _datapoints.add(name);
-    if (dataStream == null) {
-      getClient().then((client) async {
-        if (_device == null) {
-          await device;
-        }
-        dataStream = client.subscribeDevice(_device);
-        _subscription = dataStream.listen(_loadData);
-      });
-    }
+    if (dataStream != null) return;
+
+    getClient().then((client) async {
+      if (_device == null) {
+        await device;
+      }
+      dataStream = client.subscribeDevice(_device);
+      _subscription = dataStream.listen(_loadData);
+    });
   }
 
   void removeSubscription(String name) {
@@ -287,6 +302,7 @@ class DeviceNode extends ChildNode implements DeviceNd {
         _subscription = null;
       }
       dataStream = null;
+      getClient().then((client) => client.unsubscribeDevice(_device));
     }
   }
 
@@ -294,12 +310,6 @@ class DeviceNode extends ChildNode implements DeviceNd {
     _device = dev;
     _devComp.complete(dev);
     updateDevice(dev, force: true);
-  }
-
-  DeviceNode(String path): super(path) {
-    serializable = false;
-    _datapoints = new Set<String>();
-    _devComp = new Completer<Device>();
   }
 
   void updateDevice(Device dev, {bool force: false}) {

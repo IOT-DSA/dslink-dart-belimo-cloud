@@ -48,6 +48,8 @@ class BClient {
   static const String _basicAuth = 'Basic ';
   static const String _bearerAuth = 'Bearer';
   static const int _maxPending = 5;
+  static const JsonDecoder jsonDecoder = const JsonDecoder();
+  static const Utf8Decoder utf8decoder = const Utf8Decoder();
 
   static StreamController<int> _controller = new StreamController<int>();
   static Stream<int> get stream => _controller.stream;
@@ -69,8 +71,7 @@ class BClient {
   String _accessTok;
   int _queuedRequests = 0;
   bool get authed => _accessTok != null && _accessTok.isNotEmpty;
-  static const JsonDecoder jsonDecoder = const JsonDecoder();
-  static const Utf8Decoder utf8decoder = const Utf8Decoder();
+  final Map<String, DeviceStream> _dStreams = <String,DeviceStream>{};
 
   Timer deviceTimer;
 
@@ -92,7 +93,12 @@ class BClient {
       var dr = _queue.removeAt(0);
       _controller.add(_queue.length);
       // Don't use await here, or it will block the loop
-      dr.client._sendRequest(dr.query, dr.path).then(_processDataResult(dr));
+      dr.client._sendRequest(dr.query, dr.path)
+          .then(_processDataResult(dr))
+          .catchError((e) {
+            logger.warning('[Account: ${dr.client.user}] ' +
+                'Error sending data request: $e');
+      });
       _pendingDataRequests += 1;
     }
   }
@@ -104,9 +110,16 @@ class BClient {
       _pendingDataRequests -= 1;
       _sendDataRequests(); // Trigger another cycle
 
+      if (map == null) {
+        logger.warning('[Account: ${data.client.user}] Error loading device ' +
+            'data. Device ${data.device.displayName}. Response was null');
+        data._completer.complete(null);
+        return;
+      }
+
       if (map.containsKey('error')) {
         logger.warning('Received error loading device data: Device: ' +
-            '${data.device.name} Response: $map');
+            '${data.device.displayName} Response: $map');
         data._completer.complete(null);
         return;
       }
@@ -168,7 +181,6 @@ class BClient {
 
       resp = await req.close();
       bd = jsonDecoder.convert(await UTF8.decodeStream(resp));
-//      bd = await JSON.decode(await UTF8.decodeStream(resp));
     } catch (e) {
       logger.warning('Failed to decode response body', e);
       return false;
@@ -235,25 +247,31 @@ class BClient {
   }
 
   Stream<DeviceData> subscribeDevice(Device dev) {
-    DeviceStream ds;
-    if (DeviceStream._subbed.containsKey(dev.id)) {
-      ds = DeviceStream._subbed[dev.id];
-    } else {
+    DeviceStream ds = _dStreams[dev.id];
+    if (ds == null) {
       ds = new DeviceStream(dev);
+      _dStreams[dev.id] = ds;
     }
 
     if (deviceTimer == null || !deviceTimer.isActive) {
       deviceTimer = new Timer.periodic(const Duration(minutes: 5), refreshDeviceData);
     }
-    return ds.controller.stream;
+    return ds.stream;
+  }
+
+  void unsubscribeDevice(Device dev) {
+    _dStreams.remove(dev.id);
   }
 
   void refreshDeviceData(Timer t) {
-    for (var sc in DeviceStream._subbed.values) {
-      getDeviceData(sc.device).then((DeviceData data) {
+    var now = new DateTime.now();
+    for (var ds in _dStreams.values) {
+      if (ds.isFresh(now)) continue;
+
+      getDeviceData(ds.device).then((DeviceData data) {
         if (data == null) return;
 
-        sc.controller.add(data);
+        ds.add(data);
       });
     }
   }
@@ -277,6 +295,10 @@ class BClient {
       return null;
     } finally {
       _queuedRequests -= 1;
+    }
+
+    if (map == null || map.isEmpty) {
+      return null;
     }
 
     if (map.containsKey('errors')) {
@@ -437,6 +459,8 @@ class BClient {
       });
     }
 
+    if (deviceTimer != null && deviceTimer.isActive) deviceTimer.cancel();
+    _dStreams.clear();
     _accessTok = null;
     _client.close(force: true);
     _cache.remove(user);
@@ -444,18 +468,37 @@ class BClient {
 }
 
 class DeviceStream {
+  static const Duration _freshDur = const Duration(minutes: 5);
   static Map<String, DeviceStream> _subbed = <String, DeviceStream>{};
   final Device device;
-  StreamController<DeviceData> controller;
+  StreamController<DeviceData> _controller;
 
-  DeviceStream(this.device) {
-    controller = new StreamController<DeviceData>.broadcast();
-    controller.onCancel = () {
-      controller.close();
+  Stream<DeviceData> get stream => _controller.stream;
+  DateTime _last;
+  bool isFresh(DateTime cur) {
+    if (_last == null || cur == null) return false;
+    return cur.difference(_last) <= _freshDur;
+  }
+
+  factory DeviceStream(Device device) {
+    var dev = _subbed[device.id];
+    if (dev != null) return dev;
+
+    dev = new DeviceStream._(device);
+    _subbed[device.id] = dev;
+    return dev;
+  }
+
+  DeviceStream._(this.device) {
+    _controller = new StreamController<DeviceData>.broadcast(onCancel: () {
       _subbed.remove(device.id);
-    };
+      _controller.close();
+    });
+  }
 
-    _subbed[device.id] = this;
+  void add(DeviceData data) {
+    _controller.add(data);
+    _last = new DateTime.now();
   }
 }
 

@@ -354,18 +354,25 @@ class AccountNode extends SimpleNode implements Account {
 
     loadUser();
     _client.getDevicesByOwner().then(_populateOwnerDevices);
+  }
 
+  void _rmNode(LocalNode ln) {
+    if (ln == null) return;
+
+    for(var c in ln.children.keys.toList()) {
+      _rmNode(provider.getNode('${ln.path}/$c'));
+    }
+    provider.removeNode(ln.path, recurse: false);
   }
 
   @override
   void onRemoving() {
-    _client?.close();
-
     // User this instead of default removeNode because it's more efficient.
     for (var c in children.values.where((nd) => nd is OwnerNode).toList()) {
-//      _rmNode(c as LocalNode);
-      (c as OwnerNode).remove();
+      _rmNode(c as LocalNode);
     }
+
+    _client?.close();
   }
 
   Future<bool> updateAccount(String user, String pass) async {
