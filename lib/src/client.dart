@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:convert' show JSON, UTF8;
+import 'dart:convert';
 import 'dart:collection' show HashMap;
 import 'dart:io';
 
@@ -48,6 +48,8 @@ class BClient {
   static const String _basicAuth = 'Basic ';
   static const String _bearerAuth = 'Bearer';
   static const int _maxPending = 5;
+  static const JsonDecoder jsonDecoder = const JsonDecoder();
+  static const Utf8Decoder utf8decoder = const Utf8Decoder();
 
   static StreamController<int> _controller = new StreamController<int>();
   static Stream<int> get stream => _controller.stream;
@@ -69,6 +71,9 @@ class BClient {
   String _accessTok;
   int _queuedRequests = 0;
   bool get authed => _accessTok != null && _accessTok.isNotEmpty;
+  final Map<String, DeviceStream> _dStreams = <String,DeviceStream>{};
+
+  Timer deviceTimer;
 
   static Future<Map<String,dynamic>> _addDataRequest(DataRequest data) {
     var el = _requestCache[data.hashCode];
@@ -88,7 +93,12 @@ class BClient {
       var dr = _queue.removeAt(0);
       _controller.add(_queue.length);
       // Don't use await here, or it will block the loop
-      dr.client._sendRequest(dr.query, dr.path).then(_processDataResult(dr));
+      dr.client._sendRequest(dr.query, dr.path)
+          .then(_processDataResult(dr))
+          .catchError((e) {
+            logger.warning('[Account: ${dr.client.user}] ' +
+                'Error sending data request: $e');
+      });
       _pendingDataRequests += 1;
     }
   }
@@ -100,9 +110,16 @@ class BClient {
       _pendingDataRequests -= 1;
       _sendDataRequests(); // Trigger another cycle
 
+      if (map == null) {
+        logger.warning('[Account: ${data.client.user}] Error loading device ' +
+            'data. Device ${data.device.displayName}. Response was null');
+        data._completer.complete(null);
+        return;
+      }
+
       if (map.containsKey('error')) {
         logger.warning('Received error loading device data: Device: ' +
-            '${data.device.name} Response: $map');
+            '${data.device.displayName} Response: $map');
         data._completer.complete(null);
         return;
       }
@@ -163,7 +180,7 @@ class BClient {
           'password=${Uri.encodeQueryComponent(pw)}');
 
       resp = await req.close();
-      bd = await JSON.decode(await UTF8.decodeStream(resp));
+      bd = jsonDecoder.convert(await UTF8.decodeStream(resp));
     } catch (e) {
       logger.warning('Failed to decode response body', e);
       return false;
@@ -229,6 +246,36 @@ class BClient {
     return owners.toList();
   }
 
+  Stream<DeviceData> subscribeDevice(Device dev) {
+    DeviceStream ds = _dStreams[dev.id];
+    if (ds == null) {
+      ds = new DeviceStream(dev);
+      _dStreams[dev.id] = ds;
+    }
+
+    if (deviceTimer == null || !deviceTimer.isActive) {
+      deviceTimer = new Timer.periodic(const Duration(minutes: 5), refreshDeviceData);
+    }
+    return ds.stream;
+  }
+
+  void unsubscribeDevice(Device dev) {
+    _dStreams.remove(dev.id);
+  }
+
+  void refreshDeviceData(Timer t) {
+    var now = new DateTime.now();
+    for (var ds in _dStreams.values) {
+      if (ds.isFresh(now)) continue;
+
+      getDeviceData(ds.device).then((DeviceData data) {
+        if (data == null) return;
+
+        ds.add(data);
+      });
+    }
+  }
+
   /// Get [DeviceData] from the specified Device ID *devId* optionally specify
   /// *at* as miliseconds since epoch to define when, otherwise it uses _now_
   Future<DeviceData> getDeviceData(Device dev, [int at]) async {
@@ -250,11 +297,20 @@ class BClient {
       _queuedRequests -= 1;
     }
 
+    if (map == null || map.isEmpty) {
+      return null;
+    }
+
+    if (map.containsKey('errors')) {
+      logger.warning('[Account: $user] Device Data contains errors: $map');
+      return null;
+    }
+
     DeviceData dd;
     try {
       dd = new DeviceData.fromJson(dev.profile, map);
     } catch (e) {
-      logger.warning('Error parsing DeviceData: $map', e);
+      logger.warning('[Account: $user] Error parsing DeviceData: $map', e);
     }
 
     return dd;
@@ -265,7 +321,7 @@ class BClient {
     var resp = await _sendRequest(null, PathHelper.dataProfiles(dp.ref));
 
     if (resp == null || resp['datapoints'] == null) {
-      logger.warning('Unable to retrieve datapoints for: ${dp.ref}');
+      logger.warning('[Account: $user] Unable to retrieve datapoints for: ${dp.ref}');
       return;
     }
     for (Map pt in resp['datapoints'] as List) {
@@ -368,7 +424,7 @@ class BClient {
       var req = await _client.getUrl(uri).timeout(_timeOut);
       req.headers.set(_headerAuth, '$_bearerAuth $_accessTok');
       var resp = await req.close().timeout(_timeOut);
-      body = JSON.decode(await UTF8.decodeStream(resp));
+      body = jsonDecoder.convert(await UTF8.decodeStream(resp));
       logger.finest('Request: "$path" Response body: $body');
     } catch (e) {
       logger.warning(
@@ -403,9 +459,46 @@ class BClient {
       });
     }
 
+    if (deviceTimer != null && deviceTimer.isActive) deviceTimer.cancel();
+    _dStreams.clear();
     _accessTok = null;
     _client.close(force: true);
     _cache.remove(user);
+  }
+}
+
+class DeviceStream {
+  static const Duration _freshDur = const Duration(minutes: 5);
+  static Map<String, DeviceStream> _subbed = <String, DeviceStream>{};
+  final Device device;
+  StreamController<DeviceData> _controller;
+
+  Stream<DeviceData> get stream => _controller.stream;
+  DateTime _last;
+  bool isFresh(DateTime cur) {
+    if (_last == null || cur == null) return false;
+    return cur.difference(_last) <= _freshDur;
+  }
+
+  factory DeviceStream(Device device) {
+    var dev = _subbed[device.id];
+    if (dev != null) return dev;
+
+    dev = new DeviceStream._(device);
+    _subbed[device.id] = dev;
+    return dev;
+  }
+
+  DeviceStream._(this.device) {
+    _controller = new StreamController<DeviceData>.broadcast(onCancel: () {
+      _subbed.remove(device.id);
+      _controller.close();
+    });
+  }
+
+  void add(DeviceData data) {
+    _controller.add(data);
+    _last = new DateTime.now();
   }
 }
 

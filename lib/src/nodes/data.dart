@@ -98,6 +98,11 @@ class DataValueNode extends ChildNode {
       dn.removeSubscription(name);
     }
   }
+
+  @override
+  void onRemoving() {
+    onUnsubscribe();
+  }
 }
 
 //* @Action Get_Date_Point

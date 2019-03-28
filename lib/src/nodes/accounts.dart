@@ -6,7 +6,7 @@ import 'package:dslink/nodes.dart' show NodeNamer;
 import 'common.dart';
 import 'devices.dart';
 import '../client.dart';
-import '../../models.dart' show Owner;
+import '../../models.dart' show Owner, Device;
 
 //* @Action Add_Account
 //* @Parent root
@@ -159,7 +159,6 @@ class AccountNode extends SimpleNode implements Account {
 
   BClient _client;
   Completer<BClient> _clComp;
-  Timer _refresh;
 
   Future<BClient> get client async {
     if (_client != null) {
@@ -195,8 +194,6 @@ class AccountNode extends SimpleNode implements Account {
         _clComp.complete(cl);
         loadUser();
         loadDevices();
-
-        _refresh = new Timer.periodic(_refDur, _refreshDevices);
       } else {
         cl.close();
       }
@@ -274,20 +271,47 @@ class AccountNode extends SimpleNode implements Account {
   }
 
   Future<Null> loadDevices() async {
-    // Remove existing OwnerNodes (and child nodes) as getDevices does not
-    // provide a way to track removed datapoints.
-    for (var c in children.values.where((nd) => nd is OwnerNd).toList()) {
-      _rmNode(c as LocalNode);
-    }
-
     var owners = await _client.getDevicesByOwner();
-    for (var own in owners) {
+    // Check for owners already in nodes.
+    for (OwnerNode c in children.values.where((Node nd) => nd is OwnerNode).toList()) {
+      Owner own;
+      for (var i = 0; i < owners.length; i++) {
+        if (c.displayName != owners[i].name) continue;
+        own = owners[i];
+        break;
+      }
+
+      if (own == null) {
+        // Not in the new list, get rid of it.
+        c.remove();
+        continue;
+      }
+
+      owners.remove(own); // Remove from list before updating
+      c.update(own);
+
+      List<DeviceNode> deviceNodes = c.children.values
+          .where((Node nd) => nd is DeviceNode)
+          .toList();
+      List<Device> ownerDevices = own.devices.toList();
+      _updateDevices(deviceNodes, ownerDevices, c.path);
+
+    } // end check for owners already in nodes.
+
+    for (var own in owners) { // Add remaining owners.
+      if (own?.name == null) continue;
       var oname = NodeNamer.createName(own.name);
-      var oNd = provider.addNode('$path/$oname', OwnerNode.definition(own))
-          as OwnerNode;
-      oNd.setOwner(own);
+      var opath = '$path/$oname';
+      OwnerNode oNd = provider.getNode(opath);
+      if (oNd != null) {
+        oNd.update(own);
+      } else {
+        oNd = provider.addNode(opath, OwnerNode.definition(own));
+        oNd.setOwner(own);
+      }
 
       for (var dev in own.devices) {
+        if (dev?.displayName == null) continue;
         var dname = NodeNamer.createName(dev.displayName);
         var devNd = provider.addNode('${oNd.path}/$dname',
             DeviceNode.definition(dev)) as DeviceNode;
@@ -296,48 +320,59 @@ class AccountNode extends SimpleNode implements Account {
     }
   }
 
-  // A better recursive removal than provided by the DSLink SDK.
-  void _rmNode(LocalNode ln) {
-    if (ln == null) return;
+  void _updateDevices(List<DeviceNode> nodes, List<Device> devices, String ownPath) {
+    for (DeviceNode device in nodes) {
+      Device dev;
+      for (var i = 0; i < devices.length; i++) {
+        if (device.displayName != devices[i].displayName) continue;
+        dev = devices[i];
+        break;
+      }
 
-    for(var c in ln.children.keys.toList()) {
-      _rmNode(provider.getNode('${ln.path}/$c'));
+      if (dev == null) { // Can't find match in the current devices so remove
+        device.remove();
+        continue;
+      }
+
+      devices.remove(dev);
+      new Future(() => device.updateDevice(dev));
     }
 
-    provider.removeNode(ln.path, recurse: false);
+    for (var dev in devices) {
+      if (dev?.displayName == null) continue;
+      var dname = NodeNamer.createName(dev.displayName);
+      var devNd = provider.addNode('$ownPath/$dname',
+          DeviceNode.definition(dev)) as DeviceNode;
+      devNd.setDevice(dev);
+    }
   }
 
-  Future<Null> _refreshDevices(Timer t) async {
+  Future<Null> _refreshDevices() async {
     if (_client == null) {
       throw new StateError('Client is not authenticated');
-    }
-
-    if (t == null) {
-      // Called explicitly, restart timer from this point.
-      _refresh?.cancel();
-      _refresh = new Timer.periodic(_refDur, _refreshDevices);
-    } else {
-      // When called by timer check if we have active subscriptions.
-      // If not, disable timer and don't query.
-      if (!_hasSubscribers()) {
-        _refresh?.cancel();
-        return;
-      }
     }
 
     loadUser();
     _client.getDevicesByOwner().then(_populateOwnerDevices);
   }
 
+  void _rmNode(LocalNode ln) {
+    if (ln == null) return;
+
+    for(var c in ln.children.keys.toList()) {
+      _rmNode(provider.getNode('${ln.path}/$c'));
+    }
+    provider.removeNode(ln.path, recurse: false);
+  }
+
   @override
   void onRemoving() {
-    _refresh?.cancel();
-    _client?.close();
-
     // User this instead of default removeNode because it's more efficient.
-    for (var c in children.values.toList()) {
+    for (var c in children.values.where((nd) => nd is OwnerNode).toList()) {
       _rmNode(c as LocalNode);
     }
+
+    _client?.close();
   }
 
   Future<bool> updateAccount(String user, String pass) async {
@@ -366,21 +401,6 @@ class AccountNode extends SimpleNode implements Account {
     return auth;
   }
 
-  // Check if any of the children devices has a subscription
-  bool _hasSubscribers() {
-    for (var node in children.values) {
-      if (node is! OwnerNode) continue;
-      OwnerNode ow = node;
-      var tmpOwn = provider.getNode(ow.path) as OwnerNode;
-      for (var dev in tmpOwn.children.values) {
-        if (dev is DeviceNd && (dev as DeviceNd).hasSubscription) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
   // Populate Owners (locations) and devices at each.
   void _populateOwnerDevices(List<Owner> owners) {
     for (var own in owners) {
@@ -390,20 +410,18 @@ class AccountNode extends SimpleNode implements Account {
         oNd = provider.addNode('$path/$oname', OwnerNode.definition(own))
         as OwnerNode;
         oNd.setOwner(own);
+      } else {
+        (oNd as OwnerNode).update(own);
       }
 
-      for (var dev in own.devices) {
-        var nm = NodeNamer.createName(dev.displayName);
-        var dNd = provider.getNode('${oNd.path}/$nm');
-        if (dNd == null) {
-          dNd = provider.addNode('${oNd.path}/$nm',
-              DeviceNode.definition(dev)) as DeviceNode;
-          dNd.setDevice(dev);
-        } else {
-          (dNd as DeviceNode).updateDevice(dev);
-        }
-      }
+      List<DeviceNode> deviceNodes = oNd.children.values
+          .where((Node nd) => nd is DeviceNode)
+          .toList();
+      List<Device> devices = own.devices.toList();
+
+      _updateDevices(deviceNodes, devices, oNd.path);
     }
+
   }
 }
 
@@ -543,7 +561,7 @@ class RefreshDevices extends SimpleNode {
     final ret = {_success: true, _message: 'Success!'};
 
     try {
-      await (parent as AccountNode)._refreshDevices(null);
+      await (parent as AccountNode)._refreshDevices();
     } on StateError catch (e) {
       return ret..[_success] = false
           ..[_message] = e.message;

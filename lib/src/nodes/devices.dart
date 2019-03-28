@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dslink/nodes.dart' show NodeNamer;
+import 'package:dslink/dslink.dart' show SimpleNode;
 
 import 'common.dart';
 import 'data.dart';
@@ -60,6 +61,26 @@ class OwnerNode extends ChildNode implements OwnerNd {
 
   OwnerNode(String path) : super(path) {
     _ownComp = new Completer<Owner>();
+  }
+
+  void update(Owner own) {
+    _owner = own;
+    displayName = own.name;
+
+    SimpleNode node = children['type'];
+    node.updateValue(own.type);
+    node = children['id'];
+    node.updateValue(own.id);
+  }
+
+  Future remove() async {
+    var futs = <Future>[];
+    for (var cn in children.keys.toList()) {
+      futs.add(new Future(() => removeChild(cn)));
+    }
+
+    await Future.wait(futs);
+    super.remove();
   }
 }
 
@@ -239,13 +260,50 @@ class DeviceNode extends ChildNode implements DeviceNd {
   bool _isRefreshing = false;
 
   bool get hasSubscription => _datapoints.isNotEmpty;
+  Stream<DeviceData> dataStream;
+  StreamSubscription<DeviceData> _subscription;
+
+  DeviceNode(String path): super(path) {
+    serializable = false;
+    _datapoints = new Set<String>();
+    _devComp = new Completer<Device>();
+  }
+
+  @override
+  void onRemoving() {
+    if (_datapoints.isNotEmpty) {
+      for (var dp in _datapoints.toList()) {
+        removeSubscription(dp);
+      }
+    }
+  }
 
   void addSubscription(String name) {
     _datapoints.add(name);
+    if (dataStream != null) return;
+
+    getClient().then((client) async {
+      if (_device == null) {
+        await device;
+      }
+      dataStream = client.subscribeDevice(_device);
+      _subscription = dataStream.listen(_loadData);
+    });
   }
 
   void removeSubscription(String name) {
     _datapoints.remove(name);
+    if (_datapoints.isEmpty && _subscription != null) {
+      var fut = _subscription.cancel();
+      // Cancel can sometimes return null (though shouldn't). So watch out
+      if (fut != null) {
+        fut.then((_) => _subscription = null).catchError((e) {});
+      } else {
+        _subscription = null;
+      }
+      dataStream = null;
+      getClient().then((client) => client.unsubscribeDevice(_device));
+    }
   }
 
   void setDevice(Device dev) {
@@ -254,13 +312,9 @@ class DeviceNode extends ChildNode implements DeviceNd {
     updateDevice(dev, force: true);
   }
 
-  DeviceNode(String path): super(path) {
-    _datapoints = new Set<String>();
-    _devComp = new Completer<Device>();
-  }
-
   void updateDevice(Device dev, {bool force: false}) {
     _device = dev;
+    if (!hasSubscription && !force) return;
     getClient().then((cl) async {
       // In the case of a large queue, it's possible the refresh timer may
       // fire before the previous refresh is finished, resulting in the same
@@ -290,7 +344,21 @@ class DeviceNode extends ChildNode implements DeviceNd {
 
   void _loadData(DeviceData data) {
     _isRefreshing = false;
-    if (data == null || data.values.isEmpty) return;
+    if (data == null || data.values == null || data.values.isEmpty) return;
+
+    if (hasSubscription) {
+      for (var dp in _datapoints) {
+        var dv = provider.getNode('$path/$_data/$dp');
+        if (dv == null) continue;
+
+        var val = data.values.firstWhere((v) => v.name == dp, orElse: () => null);
+        if (val == null) continue;
+
+        dv.updateValue(val.value);
+      }
+      return;
+    }
+
     for(var v in data.values) {
       var ndName = NodeNamer.createName(v.name);
       var dv = provider.getNode('$path/$_data/$ndName');
