@@ -325,7 +325,9 @@ class DeviceNode extends ChildNode implements DeviceNd {
         return cl.getDeviceData(dev);
       }
       return null;
-    }).then(_loadData);
+    }).then((DeviceData data) {
+      _loadData(data, force: force);
+    });
 
     provider.updateValue('$path/$_devId', dev.id);
     provider.updateValue('$path/$_name', dev.name);
@@ -342,11 +344,11 @@ class DeviceNode extends ChildNode implements DeviceNd {
     provider.updateValue('$path/$_health/$_desc', dev.health.description);
   }
 
-  void _loadData(DeviceData data) {
+  void _loadData(DeviceData data, {bool force: false}) {
     _isRefreshing = false;
     if (data == null || data.values == null || data.values.isEmpty) return;
 
-    if (hasSubscription) {
+    if (hasSubscription && !force) {
       for (var dp in _datapoints) {
         var dv = provider.getNode('$path/$_data/$dp');
         if (dv == null) continue;
