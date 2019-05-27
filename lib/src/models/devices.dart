@@ -13,17 +13,29 @@ class Owner {
   }
 
   final String ref;
-  String id;
+  final String id;
   final String name;
   final String type;
   final List<Device> devices = <Device>[];
 
-  Owner._(this.ref, this.name, this.type) {
-    id = ref.split('/').last;
-  }
+  Owner._(this.id, this.ref, this.name, this.type);
 
-  factory Owner.fromJson(Map<String, String> map) => _cache[map['ref']] ??=
-      new Owner._(map['ref'], map['displayName'], map['type']);
+  factory Owner.fromJson(Map<String, String> map) {
+    var tmp = _cache[map['entityId']];
+    if (tmp == null) {
+      tmp = new Owner._(map['entityId'], map['ref'], map['displayName'], map['type']);
+      _cache[map['entityId']] = tmp;
+      return tmp;
+    }
+
+    if (tmp.name != map['displayName']) {
+      var updated = new Owner._(map['entityId'], map['ref'], map['displayName'], map['type']);
+      updated.devices.addAll(tmp.devices);
+      _cache[map['entityId']] = updated;
+      return updated;
+    }
+    return tmp;
+  }
 }
 
 class Device {

@@ -4,6 +4,8 @@ A DSLink for Belimo Cloud API (v3).
 
 ### Versions
 
+* 1.5.6 - Fix bug where owner group would not update on a refresh.
+* 1.5.5 - Improve cleanup when account is removed. 
 * 1.5.4 - Cleanup and optimize remove account.
 * 1.5.3 - Address some possible sources of null references if DeviceData API query returns invalid data, and a rare
           corner case where closing subscription caused a crash. 

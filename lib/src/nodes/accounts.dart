@@ -276,7 +276,7 @@ class AccountNode extends SimpleNode implements Account {
     for (OwnerNode c in children.values.where((Node nd) => nd is OwnerNode).toList()) {
       Owner own;
       for (var i = 0; i < owners.length; i++) {
-        if (c.displayName != owners[i].name) continue;
+        if (c.name != owners[i].id) continue;
         own = owners[i];
         break;
       }
@@ -300,8 +300,7 @@ class AccountNode extends SimpleNode implements Account {
 
     for (var own in owners) { // Add remaining owners.
       if (own?.name == null) continue;
-      var oname = NodeNamer.createName(own.name);
-      var opath = '$path/$oname';
+      var opath = '$path/${own.id}';
       OwnerNode oNd = provider.getNode(opath);
       if (oNd != null) {
         oNd.update(own);
@@ -403,15 +402,16 @@ class AccountNode extends SimpleNode implements Account {
 
   // Populate Owners (locations) and devices at each.
   void _populateOwnerDevices(List<Owner> owners) {
+    var childList = children.values.where((Node nd) => nd is OwnerNode).toList();
     for (var own in owners) {
-      var oname = NodeNamer.createName(own.name);
-      var oNd = provider.getNode('$path/$oname') as OwnerNode;
+      var oNd = provider.getNode('$path/${own.id}') as OwnerNode;
       if (oNd == null) {
-        oNd = provider.addNode('$path/$oname', OwnerNode.definition(own))
-        as OwnerNode;
+        oNd = provider.addNode('$path/${own.id}', OwnerNode.definition(own))
+            as OwnerNode;
         oNd.setOwner(own);
       } else {
         (oNd as OwnerNode).update(own);
+        childList.remove(oNd);
       }
 
       List<DeviceNode> deviceNodes = oNd.children.values
@@ -422,6 +422,7 @@ class AccountNode extends SimpleNode implements Account {
       _updateDevices(deviceNodes, devices, oNd.path);
     }
 
+    childList.forEach((OwnerNode nd) => nd.remove());
   }
 }
 
