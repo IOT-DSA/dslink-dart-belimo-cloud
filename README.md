@@ -4,6 +4,7 @@ A DSLink for Belimo Cloud API (v3).
 
 ### Versions
 
+* 1.5.7 - Minor adjustment to logging levels
 * 1.5.6 - Fix bug where owner group would not update on a refresh.
 * 1.5.5 - Improve cleanup when account is removed. 
 * 1.5.4 - Cleanup and optimize remove account.

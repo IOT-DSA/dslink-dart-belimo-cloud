@@ -111,14 +111,14 @@ class BClient {
       _sendDataRequests(); // Trigger another cycle
 
       if (map == null) {
-        logger.warning('[Account: ${data.client.user}] Error loading device ' +
+        logger.finest('[Account: ${data.client.user}] Error loading device ' +
             'data. Device ${data.device.displayName}. Response was null');
         data._completer.complete(null);
         return;
       }
 
       if (map.containsKey('error')) {
-        logger.warning('Received error loading device data: Device: ' +
+        logger.info('Received error loading device data: Device: ' +
             '${data.device.displayName} Response: $map');
         data._completer.complete(null);
         return;
@@ -424,7 +424,11 @@ class BClient {
       var req = await _client.getUrl(uri).timeout(_timeOut);
       req.headers.set(_headerAuth, '$_bearerAuth $_accessTok');
       var resp = await req.close().timeout(_timeOut);
-      body = jsonDecoder.convert(await UTF8.decodeStream(resp));
+
+      var respData = await UTF8.decodeStream(resp);
+      if (respData == null || respData.isEmpty) return null;
+
+      body = jsonDecoder.convert(respData);
       logger.finest('Request: "$path" Response body: $body');
     } catch (e) {
       logger.warning(
