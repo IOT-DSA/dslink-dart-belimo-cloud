@@ -428,7 +428,7 @@ class BClient {
       var respData = await UTF8.decodeStream(resp);
       if (respData == null || respData.isEmpty) return null;
 
-      body = jsonDecoder.convert(await UTF8.decodeStream(resp));
+      body = jsonDecoder.convert(respData);
       logger.finest('Request: "$path" Response body: $body');
     } catch (e) {
       logger.warning(
